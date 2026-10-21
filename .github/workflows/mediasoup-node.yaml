@@ -186,3 +186,48 @@ jobs:
       - if: ${{ matrix.build.run-publish-dry-run }}
         name: npm run publish:dry-run
         run: npm run publish:dry-run
+
+  # Same checks as `ci` on Alpine Linux (musl), x64 and arm64: the platform of
+  # the `-musl` prebuilt binaries published by mediasoup-worker-prebuild.yaml.
+  ci-alpine:
+    if: ${{ !contains(github.event.head_commit.message, '[no-ci]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - os: ubuntu-26.04
+          - os: ubuntu-26.04-arm
+
+    runs-on: ${{ matrix.build.os }}
+
+    timeout-minutes: 60
+
+    env:
+      ALPINE: >-
+        docker run --rm -v "$PWD:/foo bar/mediasoup" -w "/foo bar/mediasoup" -e CC=gcc -e CXX=g++ -e MEDIASOUP_SKIP_WORKER_PREBUILT_DOWNLOAD=true -e MEDIASOUP_LOCAL_DEV=true -e MEDIASOUP_BUILDTYPE=Release mediasoup/docker-alpine:ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Alpine Linux (musl) is not a GitHub runner image, and the runner cannot
+      # execute JavaScript actions inside an Alpine job container, so the
+      # checks run through `docker run` in the image of worker/Dockerfile.alpine
+      # (the same image `invoke -r worker docker-alpine` builds for local use).
+      - name: Build the Alpine image (worker/Dockerfile.alpine)
+        run: docker build -f worker/Dockerfile.alpine --tag mediasoup/docker-alpine:ci worker
+
+      - name: npm ci --foreground-scripts
+        run: $ALPINE npm ci --foreground-scripts
+
+      - name: npm run worker:prebuild
+        run: $ALPINE npm run worker:prebuild
+
+      - name: npm run worker:prebuild-name
+        run: $ALPINE npm run worker:prebuild-name
+
+      - name: npm run lint:node
+        run: $ALPINE npm run lint:node
+
+      - name: npm run test:node
+        run: $ALPINE npm run test:node

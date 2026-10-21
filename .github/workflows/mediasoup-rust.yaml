@@ -168,3 +168,41 @@ jobs:
       - if: ${{ matrix.build.run-cargo-dry-run && steps.check-versions.outputs.bumped == 'true' }}
         name: cargo publish --dry-run -p mediasoup-types -p mediasoup-sys -p mediasoup
         run: cargo publish --dry-run -p mediasoup-types -p mediasoup-sys -p mediasoup
+
+  # Same checks as `ci` on Alpine Linux (musl), x64 and arm64. The Rust
+  # toolchain of rust-toolchain.toml is installed with rustup inside the
+  # container, so everything runs in one step.
+  ci-alpine:
+    if: ${{ !contains(github.event.head_commit.message, '[no-ci]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - os: ubuntu-26.04
+          - os: ubuntu-26.04-arm
+
+    runs-on: ${{ matrix.build.os }}
+
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Alpine Linux (musl) is not a GitHub runner image, and the runner cannot
+      # execute JavaScript actions inside an Alpine job container, so the
+      # checks run through `docker run` in the image of worker/Dockerfile.alpine
+      # (the same image `invoke -r worker docker-alpine` builds for local use).
+      - name: Build the Alpine image (worker/Dockerfile.alpine)
+        run: docker build -f worker/Dockerfile.alpine --tag mediasoup/docker-alpine:ci worker
+
+      - name: cargo clippy, cargo test --release, cargo doc
+        run: |
+          docker run --rm -v "$PWD:/foo bar/mediasoup" -w "/foo bar/mediasoup" -e MEDIASOUP_LOCAL_DEV=true -e CARGO_TERM_COLOR=always -e DOCS_RS=1 -e RUSTDOCFLAGS='-D rustdoc::broken-intra-doc-links -D rustdoc::private_intra_doc_links' mediasoup/docker-alpine:ci sh -euc '
+            apk add --no-cache rustup
+            rustup-init -y --profile minimal --no-modify-path
+            export PATH="$HOME/.cargo/bin:$PATH"
+            cargo clippy --all-targets -- -D warnings
+            cargo test --release --verbose
+            cargo doc --locked --all --no-deps --lib
+          '

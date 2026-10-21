@@ -264,3 +264,41 @@ jobs:
       - if: ${{ matrix.build.run-test-asan-undefined }}
         name: invoke -r worker test-asan-undefined
         run: invoke -r worker test-asan-undefined
+
+  # Same build and tests as `ci` on Alpine Linux (musl), x64 and arm64. No
+  # clang-format in the image, so no lint, as on the ARM entries above.
+  ci-alpine:
+    if: ${{ !contains(github.event.head_commit.message, '[no-ci]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - os: ubuntu-26.04
+          - os: ubuntu-26.04-arm
+
+    runs-on: ${{ matrix.build.os }}
+
+    timeout-minutes: 90
+
+    env:
+      ALPINE: >-
+        docker run --rm -v "$PWD:/foo bar/mediasoup" -w "/foo bar/mediasoup" -e CC=gcc -e CXX=g++ -e MEDIASOUP_SKIP_WORKER_PREBUILT_DOWNLOAD=true -e MEDIASOUP_LOCAL_DEV=false -e MEDIASOUP_BUILDTYPE=Release mediasoup/docker-alpine:ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Alpine Linux (musl) is not a GitHub runner image, and the runner cannot
+      # execute JavaScript actions inside an Alpine job container, so the
+      # checks run through `docker run` in the image of worker/Dockerfile.alpine
+      # (the same image `invoke -r worker docker-alpine` builds for local use).
+      - name: Build the Alpine image (worker/Dockerfile.alpine)
+        run: docker build -f worker/Dockerfile.alpine --tag mediasoup/docker-alpine:ci worker
+
+      # invoke is installed per step: each `docker run` is a fresh container
+      # (only the mounted checkout persists between steps).
+      - name: invoke -r worker mediasoup-worker
+        run: $ALPINE sh -c 'pip3 install --break-system-packages invoke && invoke -r worker mediasoup-worker'
+
+      - name: invoke -r worker test
+        run: $ALPINE sh -c 'pip3 install --break-system-packages invoke && invoke -r worker test'
