@@ -4,6 +4,7 @@
 
 - Fix simulcast RTP timestamp jumps on layer switch and frozen retransmission buffer ([PR #2002](https://github.com/versatica/mediasoup/pull/2002)).
 - `RTP::Packet`: Fix `int16_t` truncation of the header extension shift in `SetExtensions()` ([PR #2004](https://github.com/versatica/mediasoup/pull/2004) by @satoren).
+- Alpine Linux (musl) in CI: the Node, worker and Rust workflows run their checks inside `worker/Dockerfile.alpine` on x64 and arm64, and mediasoup-worker prebuilt binaries are published for musl hosts; the tarball name carries a `-musl` suffix on such hosts so they no longer compile the worker during `npm install` (PR #XXXX).
 
 ### 3.30.1
 
